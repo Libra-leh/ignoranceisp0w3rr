@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head><!-- v1772948022 -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html-to-image/1.11.11/html-to-image.min.js"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>The Library</title>
@@ -598,7 +599,30 @@ body.ro-mode .book-review{-webkit-line-clamp:3;}
 .auth-divider{display:flex;align-items:center;gap:9px;margin:12px 0;}
 .auth-divider::before,.auth-divider::after{content:'';flex:1;height:1px;background:var(--warm-light);}
 .auth-divider span{font-size:11px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;}
+/* Export Card specialized styles */
+#export-template {
+    position: absolute;
+    left: -9999px; /* Keep it off-screen */
+    width: 400px;
+    height: 600px;
+    padding: 40px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    color: white;
+    font-family: 'Karla', sans-serif;
+    border-radius: 20px;
+    background: linear-gradient(135deg, #1e2d4a 0%, #121212 100%);
+    overflow: hidden;
+}
 
+.export-header { font-size: 12px; letter-spacing: 2px; opacity: 0.8; font-weight: 600; }
+.export-cover-container { width: 100%; height: 340px; border-radius: 12px; overflow: hidden; box-shadow: 0 15px 35px rgba(0,0,0,0.4); }
+.export-cover-container img { width: 100%; height: 100%; object-fit: cover; }
+.export-info { background: rgba(255,255,255,0.1); backdrop-filter: blur(10px); padding: 20px; border-radius: 15px; border: 1px solid rgba(255,255,255,0.1); }
+.export-title { font-family: 'Playfair Display', serif; font-size: 26px; margin: 0; line-height: 1.2; }
+.export-author { font-size: 16px; margin: 8px 0 0; opacity: 0.7; }
+.export-footer { display: flex; align-items: center; gap: 8px; font-size: 12px; opacity: 0.5; }
 </style>
 
 <style id="compact-auth-style">
@@ -853,7 +877,7 @@ const FS_COLLECTION = 'library';
           <option value="">— Choose a question —</option>
           <option>What is the name of your first pet?</option>
           <option>What city were you born in?</option>
-          <option>What is your mother's maiden name?</option>
+          <option>What is your password?</option>
           <option>What was the name of your first school?</option>
           <option>What is your favourite book?</option>
         </select>
@@ -992,6 +1016,14 @@ const FS_COLLECTION = 'library';
     <div class="modal-body">
       <input type="hidden" id="edit-id">
       <input type="hidden" id="f-cover">
+      <div class="modal-footer" style="margin-top:25px; display:flex; gap:10px; justify-content:flex-end">
+    
+      <button class="btn-share-img" onclick="exportBookAsImage(_currentRoBookId)" style="background: #1DB954; color: white; border: none; padding: 8px 15px; border-radius: 20px; font-weight: bold; cursor: pointer;">
+       📸 Share Card
+    </button>
+
+    <button class="btn-secondary" onclick="closeRoReview()">Close</button>
+</div>
 
       <!-- ── Vietnamese book search (Tiki/CF) ── -->
       <div style="font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:5px">🇻🇳 Vietnamese covers</div>
@@ -1321,6 +1353,17 @@ const FS_COLLECTION = 'library';
       </div>
     </div>
   </div>
+</div>
+  <div id="export-template">
+    <div class="export-header" id="exp-label">MY 2026 COLLECTION</div>
+    <div class="export-cover-container" id="exp-cover"></div>
+    <div class="export-info">
+        <h2 class="export-title" id="exp-title"></h2>
+        <p class="export-author" id="exp-author"></p>
+    </div>
+    <div class="export-footer">
+        <span>📖 The Library App</span>
+    </div>
 </div>
 
 <script>
@@ -1756,6 +1799,42 @@ function loginUser(username) {
       }
     }
   } catch(e){}
+  async function exportBookAsImage(bookId) {
+    const book = books.find(b => b.id === bookId);
+    if (!book) return;
+
+    // 1. Populate the template
+    document.getElementById('exp-title').textContent = book.title || 'Untitled';
+    document.getElementById('exp-author').textContent = book.author ? `by ${book.author}` : '';
+    document.getElementById('exp-label').textContent = currentLang === 'vi' ? 'BỘ SƯU TẬP CỦA TÔI' : 'MY COLLECTION';
+    
+    const coverContainer = document.getElementById('exp-cover');
+    if (book.cover) {
+        // We use a new Image to handle CORS issues
+        coverContainer.innerHTML = `<img src="${book.cover}" crossorigin="anonymous">`;
+    } else {
+        coverContainer.innerHTML = `<div style="width:100%; height:100%; background:#2c3e50; display:flex; align-items:center; justify-content:center; font-size:50px;">📖</div>`;
+    }
+
+    // 2. Capture the image
+    const node = document.getElementById('export-template');
+    
+    // Tiny delay to ensure image loads
+    setTimeout(() => {
+        htmlToImage.toPng(node, { pixelRatio: 3 })
+            .then(function (dataUrl) {
+                const link = document.createElement('a');
+                link.download = `${book.title || 'book'}-share.png`;
+                link.href = dataUrl;
+                link.click();
+                showToast("✨ Image ready!");
+            })
+            .catch(function (error) {
+                console.error('Export failed', error);
+                showToast("❌ Export failed. Try again.");
+            });
+    }, 100);
+}
   // Listen for books queued from a friend's read-only tab in another window
   window.addEventListener('storage', e => {
     if(e.key !== 'lib_add_queue' || !e.newValue || !currentUser || isReadOnly) return;
