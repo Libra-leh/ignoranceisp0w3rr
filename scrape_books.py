@@ -73,64 +73,69 @@ def parse_books(html: str) -> list[dict]:
 
     Books without a "Loved by" count are indie/promoted listings — we skip those.
     """
+    def parse_books(html: str) -> list[dict]:
     soup = BeautifulSoup(html, "html.parser")
     books = []
-    seen_titles = set()
+    seen = set()
+    loved_pattern = re.compile(r"Loved by\s*(\d+)\s*people", re.IGNORECASE)
 
-    # Find all elements containing "Loved by N people"
-    loved_pattern = re.compile(r"Loved by (\d+)\s*people", re.IGNORECASE)
-
-    for el in soup.find_all(string=loved_pattern):
-        loved_match = loved_pattern.search(el)
-        if not loved_match:
-            continue
-        loved_count = int(loved_match.group(1))
-
-        # Walk up to find the containing book block
-        container = el.find_parent()
-        for _ in range(6):  # walk up max 6 levels
-            if container is None:
-                break
-            # Look for h2 (title) in siblings/descendants nearby
-            # The structure puts the loved count just before the h2
-            # Try next siblings first, then parent's children
-            h2 = container.find("h2")
-            if h2:
-                break
-            container = container.find_parent()
-
-        if container is None:
-            continue
-
-        h2 = container.find("h2")
-        if not h2:
-            continue
-
+    # Every book block contains an <h2> with a title link.
+    # For loved books, a sibling/nearby element contains "Loved by N people".
+    # Walk all h2s, check if their ancestor block has a loved count.
+    for h2 in soup.find_all("h2"):
         title_el = h2.find("a") or h2
         title = title_el.get_text(strip=True)
-        if not title or title in seen_titles:
+        if not title or title in seen:
             continue
-        seen_titles.add(title)
+
+        # Walk up to find a container that holds the loved count
+        container = h2.parent
+        loved_count = 0
+        for _ in range(8):
+            if container is None:
+                break
+            text = container.get_text(" ", strip=True)
+            m = loved_pattern.search(text)
+            if m:
+                loved_count = int(m.group(1))
+                break
+            container = container.parent
+
+        # Skip promoted books with no loved count
+        if loved_count == 0:
+            continue
+
+        seen.add(title)
 
         # Book URL
-        book_href = title_el.get("href", "") if title_el.name == "a" else ""
-        book_url = urljoin(BASE_URL, book_href) if book_href else ""
+        href = title_el.get("href", "") if title_el.name == "a" else ""
+        book_url = urljoin(BASE_URL, href) if href else ""
 
-        # Author — find "By [author]" text near the h2
+        # Re-find container from h2 for img/author search
+        block = h2.parent
+        for _ in range(8):
+            if block is None:
+                break
+            if block.find("img", alt=re.compile(r"Book cover", re.I)):
+                break
+            block = block.parent
+
+        # Author
         author = ""
-        # Look for author link with /search/author/ pattern
-        author_links = container.find_all("a", href=re.compile(r"/search/author/"))
-        if author_links:
-            author = author_links[0].get_text(strip=True)
+        if block:
+            al = block.find_all("a", href=re.compile(r"/search/author/"))
+            if al:
+                author = al[0].get_text(strip=True)
 
-        # Cover image
+        # Cover — upgrade to width=600 for better quality
         cover = ""
-        img = container.find("img", alt=re.compile(r"Book cover of", re.I))
-        if img:
-            src = img.get("src", "")
-            # Upgrade to higher resolution: replace width=220 with width=400
-            src = re.sub(r"width=\d+", "width=400", src)
-            cover = src
+        if block:
+            img = block.find("img", alt=re.compile(r"Book cover", re.I))
+            if img:
+                src = img.get("src", "")
+                src = re.sub(r"width=\d+", "width=600", src)
+                src = re.sub(r"quality=\d+", "quality=90", src)
+                cover = src
 
         books.append({
             "title":       title,
@@ -139,6 +144,9 @@ def parse_books(html: str) -> list[dict]:
             "loved_count": loved_count,
             "url":         book_url,
         })
+
+    books.sort(key=lambda b: b["loved_count"], reverse=True)
+    return books
 
     # Sort by loved_count descending (page order is already roughly sorted,
     # but let's be explicit)
