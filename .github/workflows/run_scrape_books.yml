@@ -1,0 +1,41 @@
+name: Run scrape_books
+
+# This determines WHEN the script runs
+on:
+  schedule:
+    - cron: '0 0 * * *' # This runs every day at midnight (UTC)
+  workflow_dispatch:      # This allows you to run it manually with a button click
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Pulls your code from the repo onto the GitHub runner
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 2. Sets up a Python environment
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      # 3. Installs any libraries (like requests or BeautifulSoup)
+      - name: Install dependencies
+        run: |
+          pip install requests beautifulsoup4 
+          # Add any other libraries your scraper needs above
+
+      # 4. Executes your script
+      - name: Run scraper
+        run: python scraper.py
+
+      # 5. Saves the generated .json file back to your repository
+      - name: Commit and push changes
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add data.json
+          git commit -m "Auto-update data.json" || exit 0
+          git push
