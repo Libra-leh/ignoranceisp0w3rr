@@ -7427,27 +7427,6 @@ document.addEventListener('DOMContentLoaded', function(){
     sorted.forEach(function(b){ freq[b.genre] = (freq[b.genre]||0) + 1; });
     return Object.entries(freq).sort(function(a,b){ return b[1]-a[1]; })[0][0];
   }
-
-  // ── Google Books fetcher ──────────────────────────────────────────────────
-  // startOffset shifts which slice of results we take (for refresh variety)
-  async function fetchPopularBooks(genre, ownTitles, startOffset) {
-    startOffset = startOffset || 0;
-    var query = GENRE_QUERY[genre] || ('subject:' + genre + ' bestseller');
-    // Date-seeded start index: rotates daily, offset shifts on refresh
-    // Use indices 0-20 only — these are the most relevant/popular results
-    var start = ((DAY_SEED * 3 + startOffset) % 3) * 6; // 0, 6, or 12
-    var url = 'https://www.googleapis.com/books/v1/volumes'
-            + '?q=' + encodeURIComponent(query)
-            + '&orderBy=relevance'
-            + '&maxResults=20'
-            + '&startIndex=' + start
-            + '&printType=books'
-            + '&fields=items(volumeInfo(title,authors,imageLinks,ratingsCount,averageRating))';
-    try {
-      var res  = await fetch(url);
-      var data = await res.json();
-      var items = (data.items || []).filter(function(item) {
-        var vi = item.volumeInfo || {};
         // Quality filter: must have cover, author, and title
         return vi.title && vi.authors && vi.authors.length &&
                vi.imageLinks && (vi.imageLinks.thumbnail || vi.imageLinks.smallThumbnail);
